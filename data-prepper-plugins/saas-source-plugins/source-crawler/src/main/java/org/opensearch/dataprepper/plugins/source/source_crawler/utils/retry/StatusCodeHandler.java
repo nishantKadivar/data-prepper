@@ -24,18 +24,4 @@ public interface StatusCodeHandler {
      *         exception
      */
     RetryDecision handleStatusCode(Exception ex, int retryCount, Runnable credentialRenewal);
-
-    /**
-     * Handle an HTTP exception and determine whether to retry with optional request context.
-     *
-     * <p>Default implementation preserves backward compatibility by delegating to
-     * {@link #handleStatusCode(Exception, int, Runnable)}.
-     */
-    default RetryDecision handleStatusCode(
-            final Exception ex,
-            final int retryCount,
-            final Runnable credentialRenewal,
-            final RetryRequestContext retryRequestContext) {
-        return handleStatusCode(ex, retryCount, credentialRenewal);
-    }
 }

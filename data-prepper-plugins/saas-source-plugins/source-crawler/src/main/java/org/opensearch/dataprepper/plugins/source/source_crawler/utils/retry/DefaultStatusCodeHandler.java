@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 
 import java.util.Collections;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -26,30 +25,21 @@ import static org.opensearch.dataprepper.logging.DataPrepperMarkers.NOISY;
 @Slf4j
 public class DefaultStatusCodeHandler implements StatusCodeHandler {
 
-    private final Map<String, Set<HttpStatus>> retryableClientStatusCodesByEndpoint;
+    private final Set<HttpStatus> retryableClientStatusCodes;
 
     public DefaultStatusCodeHandler() {
-        this(Collections.emptyMap());
+        this(Collections.emptySet());
     }
 
-    public DefaultStatusCodeHandler(final Map<String, Set<HttpStatus>> retryableClientStatusCodesByEndpoint) {
-        this.retryableClientStatusCodesByEndpoint = retryableClientStatusCodesByEndpoint != null
-                ? retryableClientStatusCodesByEndpoint
-                : Collections.emptyMap();
+    public DefaultStatusCodeHandler(final Set<HttpStatus> retryableClientStatusCodes) {
+        this.retryableClientStatusCodes = retryableClientStatusCodes != null
+                ? Set.copyOf(retryableClientStatusCodes)
+                : Collections.emptySet();
     }
 
     @Override
     public RetryDecision handleStatusCode(Exception ex, int retryCount,
                                           Runnable credentialRenewal) {
-        return handleStatusCode(ex, retryCount, credentialRenewal, RetryRequestContext.EMPTY);
-    }
-
-    @Override
-    public RetryDecision handleStatusCode(
-            final Exception ex,
-            final int retryCount,
-            final Runnable credentialRenewal,
-            final RetryRequestContext retryRequestContext) {
         Optional<HttpStatus> statusCode = RetryStrategy.getStatusCode(ex);
         String statusMessage = ex.getMessage();
 
@@ -83,9 +73,8 @@ public class DefaultStatusCodeHandler implements StatusCodeHandler {
 
             default:
                 if (statusCode.get().is4xxClientError()) {
-                    if (isEndpointPolicyRetryable(statusCode.get(), retryRequestContext)) {
-                        log.info(NOISY, "Client error {} is configured retryable for endpoint '{}'.",
-                                statusCode.get(), retryRequestContext.getEndpoint());
+                    if (isRetryableClientStatus(statusCode.get())) {
+                        log.info(NOISY, "Client error {} is configured as retryable.", statusCode.get());
                         return RetryDecision.retry();
                     }
                     log.error(NOISY, "Client error: {}. Will not retry.", statusCode, ex);
@@ -101,12 +90,7 @@ public class DefaultStatusCodeHandler implements StatusCodeHandler {
         }
     }
 
-    private boolean isEndpointPolicyRetryable(final HttpStatus statusCode, final RetryRequestContext retryRequestContext) {
-        if (retryRequestContext == null || retryRequestContext.getEndpoint() == null) {
-            return false;
-        }
-
-        final Set<HttpStatus> retryableStatuses = retryableClientStatusCodesByEndpoint.get(retryRequestContext.getEndpoint());
-        return retryableStatuses != null && retryableStatuses.contains(statusCode);
+    private boolean isRetryableClientStatus(final HttpStatus statusCode) {
+        return retryableClientStatusCodes.contains(statusCode);
     }
 }

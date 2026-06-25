@@ -22,7 +22,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -220,32 +219,24 @@ class DefaultStatusCodeHandlerTest {
     }
 
     @Test
-    void handleStatusCode_WithConflictAndEndpointPolicy_Retries() {
-        final DefaultStatusCodeHandler endpointAwareHandler = new DefaultStatusCodeHandler(
-                Map.of("qualys-host-list", Set.of(HttpStatus.CONFLICT)));
+    void handleStatusCode_WithConflictAndConfiguredRetryableStatus_Retries() {
+        final DefaultStatusCodeHandler configurableHandler = new DefaultStatusCodeHandler(
+                Set.of(HttpStatus.CONFLICT));
         final HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.CONFLICT);
 
-        final RetryDecision decision = endpointAwareHandler.handleStatusCode(
-                exception,
-                0,
-                credentialRenewal,
-                RetryRequestContext.builder().endpoint("qualys-host-list").build());
+        final RetryDecision decision = configurableHandler.handleStatusCode(exception, 0, credentialRenewal);
 
         assertThat(decision.isShouldStop(), equalTo(false));
         verifyNoInteractions(credentialRenewal);
     }
 
     @Test
-    void handleStatusCode_WithConflictAndDifferentEndpointPolicy_Stops() {
-        final DefaultStatusCodeHandler endpointAwareHandler = new DefaultStatusCodeHandler(
-                Map.of("another-endpoint", Set.of(HttpStatus.CONFLICT)));
+    void handleStatusCode_WithConflictAndNoConfiguredRetryableStatus_Stops() {
+        final DefaultStatusCodeHandler configurableHandler = new DefaultStatusCodeHandler(
+                Set.of(HttpStatus.UNPROCESSABLE_ENTITY));
         final HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.CONFLICT);
 
-        final RetryDecision decision = endpointAwareHandler.handleStatusCode(
-                exception,
-                0,
-                credentialRenewal,
-                RetryRequestContext.builder().endpoint("qualys-host-list").build());
+        final RetryDecision decision = configurableHandler.handleStatusCode(exception, 0, credentialRenewal);
 
         assertThat(decision.isShouldStop(), equalTo(true));
         verifyNoInteractions(credentialRenewal);
