@@ -19,12 +19,20 @@ import java.util.List;
  * parameter naming for custom header mappings.
  */
 public class HeaderAwareRetryStrategy extends RetryAfterHeaderStrategy {
+    private final List<HttpStatus> rateLimitStatusCodes;
+    private final List<String> retryDelayHeaderNames;
+    private final String remainingHeaderName;
+    private final String resetHeaderName;
 
     /**
      * Constructor with default sleep times.
      */
     public HeaderAwareRetryStrategy() {
         super();
+        this.rateLimitStatusCodes = HeaderRetryDefaults.RATE_LIMIT_STATUS_CODES;
+        this.retryDelayHeaderNames = HeaderRetryDefaults.RETRY_DELAY_HEADERS;
+        this.remainingHeaderName = HeaderRetryDefaults.REMAINING_HEADER_NAME;
+        this.resetHeaderName = HeaderRetryDefaults.RESET_HEADER_NAME;
     }
 
     /**
@@ -34,6 +42,10 @@ public class HeaderAwareRetryStrategy extends RetryAfterHeaderStrategy {
      */
     public HeaderAwareRetryStrategy(final int maxRetries) {
         super(maxRetries);
+        this.rateLimitStatusCodes = HeaderRetryDefaults.RATE_LIMIT_STATUS_CODES;
+        this.retryDelayHeaderNames = HeaderRetryDefaults.RETRY_DELAY_HEADERS;
+        this.remainingHeaderName = HeaderRetryDefaults.REMAINING_HEADER_NAME;
+        this.resetHeaderName = HeaderRetryDefaults.RESET_HEADER_NAME;
     }
 
     /**
@@ -45,7 +57,8 @@ public class HeaderAwareRetryStrategy extends RetryAfterHeaderStrategy {
     public HeaderAwareRetryStrategy(
             final List<Integer> rateLimitRetrySleepTime,
             final List<HttpStatus> rateLimitStatusCodes) {
-        this(rateLimitRetrySleepTime, rateLimitStatusCodes, null, null, null);
+        this(rateLimitRetrySleepTime, rateLimitStatusCodes, HeaderRetryDefaults.RETRY_DELAY_HEADERS,
+            HeaderRetryDefaults.REMAINING_HEADER_NAME, HeaderRetryDefaults.RESET_HEADER_NAME);
     }
 
     /**
@@ -64,11 +77,38 @@ public class HeaderAwareRetryStrategy extends RetryAfterHeaderStrategy {
             final List<String> retryDelayHeaderNames,
             final String remainingHeaderName,
             final String resetHeaderName) {
-        super(
-                rateLimitRetrySleepTime,
-                rateLimitStatusCodes,
-                retryDelayHeaderNames,
-                remainingHeaderName,
-                resetHeaderName);
+        super(rateLimitRetrySleepTime, rateLimitStatusCodes);
+        this.rateLimitStatusCodes = rateLimitStatusCodes != null
+                ? List.copyOf(rateLimitStatusCodes)
+                : HeaderRetryDefaults.RATE_LIMIT_STATUS_CODES;
+        this.retryDelayHeaderNames = retryDelayHeaderNames != null && !retryDelayHeaderNames.isEmpty()
+                ? List.copyOf(retryDelayHeaderNames)
+                : HeaderRetryDefaults.RETRY_DELAY_HEADERS;
+        this.remainingHeaderName = remainingHeaderName != null && !remainingHeaderName.isBlank()
+                ? remainingHeaderName
+                : HeaderRetryDefaults.REMAINING_HEADER_NAME;
+        this.resetHeaderName = resetHeaderName != null && !resetHeaderName.isBlank()
+                ? resetHeaderName
+                : HeaderRetryDefaults.RESET_HEADER_NAME;
+    }
+
+    @Override
+    protected boolean isRateLimited(final HttpStatus status) {
+        return rateLimitStatusCodes.contains(status);
+    }
+
+    @Override
+    protected List<String> getRetryDelayHeaderNames() {
+        return retryDelayHeaderNames;
+    }
+
+    @Override
+    protected String getRemainingHeaderName() {
+        return remainingHeaderName;
+    }
+
+    @Override
+    protected String getResetHeaderName() {
+        return resetHeaderName;
     }
 }

@@ -24,36 +24,26 @@ import static org.hamcrest.Matchers.notNullValue;
 class RetryAfterHeaderStrategyCompatibilityTest {
 
     @Test
-    void constructors_ShouldRemainAvailableForCompatibility() {
+    void constructors_ShouldRemainAvailableForDefaultStrategyCompatibility() {
         final RetryAfterHeaderStrategy defaultStrategy = new RetryAfterHeaderStrategy();
         final RetryAfterHeaderStrategy withMaxRetries = new RetryAfterHeaderStrategy(3);
         final RetryAfterHeaderStrategy withRateLimitConfig =
                 new RetryAfterHeaderStrategy(List.of(2, 4), List.of(HttpStatus.TOO_MANY_REQUESTS));
-        final RetryAfterHeaderStrategy withHeaderConfig = new RetryAfterHeaderStrategy(
-                List.of(2, 4),
-                List.of(HttpStatus.CONFLICT),
-                List.of("X-Retry-In"),
-                "X-Remaining",
-                "X-Reset");
 
         assertThat(defaultStrategy, notNullValue());
         assertThat(withMaxRetries.getMaxRetries(), equalTo(3));
         assertThat(withRateLimitConfig.getMaxRetries(), equalTo(2));
-        assertThat(withHeaderConfig.getMaxRetries(), equalTo(2));
     }
 
     @Test
-    void calculateSleepTime_ShouldDelegateToHeaderAwareBehavior() {
+    void calculateSleepTime_ShouldUseDefaultRetryAfterHeaderBehavior() {
         final RetryAfterHeaderStrategy strategy = new RetryAfterHeaderStrategy(
                 List.of(2, 4),
-                List.of(HttpStatus.CONFLICT),
-                List.of("X-Retry-In"),
-                "X-Remaining",
-                "X-Reset");
+                List.of(HttpStatus.TOO_MANY_REQUESTS));
         final HttpHeaders headers = new HttpHeaders();
-        headers.set("X-Retry-In", "7");
+        headers.set("Retry-After", "7");
         final HttpClientErrorException exception = new HttpClientErrorException(
-                HttpStatus.CONFLICT, "Conflict", headers, null, null);
+                HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
         final long sleepTime = strategy.calculateSleepTime(exception, 0);
 

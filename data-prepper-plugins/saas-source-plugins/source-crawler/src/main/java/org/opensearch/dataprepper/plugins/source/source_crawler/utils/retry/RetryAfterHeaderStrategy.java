@@ -30,9 +30,6 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
     private final List<Integer> retryAttemptSleepTime;
     private final List<Integer> rateLimitRetrySleepTime;
     private final List<HttpStatus> rateLimitStatusCodes;
-    private final List<String> retryDelayHeaderNames;
-    private final String remainingHeaderName;
-    private final String resetHeaderName;
     private final int maxRetries;
 
     /**
@@ -42,9 +39,6 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
         this.retryAttemptSleepTime = RetryStrategy.DEFAULT_RETRY_ATTEMPT_SLEEP_TIME;
         this.rateLimitRetrySleepTime = RetryStrategy.DEFAULT_RATE_LIMIT_RETRY_SLEEP_TIME;
         this.rateLimitStatusCodes = HeaderRetryDefaults.RATE_LIMIT_STATUS_CODES;
-        this.retryDelayHeaderNames = HeaderRetryDefaults.RETRY_DELAY_HEADERS;
-        this.remainingHeaderName = HeaderRetryDefaults.REMAINING_HEADER_NAME;
-        this.resetHeaderName = HeaderRetryDefaults.RESET_HEADER_NAME;
         this.maxRetries = RetryStrategy.MAX_RETRIES;
     }
 
@@ -57,9 +51,6 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
         this.retryAttemptSleepTime = RetryStrategy.DEFAULT_RETRY_ATTEMPT_SLEEP_TIME;
         this.rateLimitRetrySleepTime = RetryStrategy.DEFAULT_RATE_LIMIT_RETRY_SLEEP_TIME;
         this.rateLimitStatusCodes = HeaderRetryDefaults.RATE_LIMIT_STATUS_CODES;
-        this.retryDelayHeaderNames = HeaderRetryDefaults.RETRY_DELAY_HEADERS;
-        this.remainingHeaderName = HeaderRetryDefaults.REMAINING_HEADER_NAME;
-        this.resetHeaderName = HeaderRetryDefaults.RESET_HEADER_NAME;
         this.maxRetries = maxRetries;
     }
 
@@ -73,24 +64,6 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
     public RetryAfterHeaderStrategy(
             final List<Integer> rateLimitRetrySleepTime,
             final List<HttpStatus> rateLimitStatusCodes) {
-        this(rateLimitRetrySleepTime, rateLimitStatusCodes, null, null, null);
-    }
-
-    /**
-     * Constructor with custom header mapping.
-     *
-     * @param rateLimitRetrySleepTime custom sleep times for rate-limit retries (in seconds)
-     * @param rateLimitStatusCodes status codes considered rate-limited
-     * @param retryDelayHeaderNames retry-delay style headers in precedence order
-     * @param remainingHeaderName remaining-quota header name
-     * @param resetHeaderName reset-epoch header name
-     */
-    public RetryAfterHeaderStrategy(
-            final List<Integer> rateLimitRetrySleepTime,
-            final List<HttpStatus> rateLimitStatusCodes,
-            final List<String> retryDelayHeaderNames,
-            final String remainingHeaderName,
-            final String resetHeaderName) {
         this.retryAttemptSleepTime = RetryStrategy.DEFAULT_RETRY_ATTEMPT_SLEEP_TIME;
         this.rateLimitRetrySleepTime = rateLimitRetrySleepTime != null
                 ? rateLimitRetrySleepTime
@@ -98,15 +71,6 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
         this.rateLimitStatusCodes = rateLimitStatusCodes != null
                 ? rateLimitStatusCodes
                 : HeaderRetryDefaults.RATE_LIMIT_STATUS_CODES;
-        this.retryDelayHeaderNames = retryDelayHeaderNames != null && !retryDelayHeaderNames.isEmpty()
-                ? List.copyOf(retryDelayHeaderNames)
-                : HeaderRetryDefaults.RETRY_DELAY_HEADERS;
-        this.remainingHeaderName = remainingHeaderName != null && !remainingHeaderName.isBlank()
-                ? remainingHeaderName
-                : HeaderRetryDefaults.REMAINING_HEADER_NAME;
-        this.resetHeaderName = resetHeaderName != null && !resetHeaderName.isBlank()
-                ? resetHeaderName
-                : HeaderRetryDefaults.RESET_HEADER_NAME;
         this.maxRetries = this.rateLimitRetrySleepTime.size();
     }
 
@@ -142,8 +106,20 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
         return maxRetries;
     }
 
-    private boolean isRateLimited(final HttpStatus status) {
+    protected boolean isRateLimited(final HttpStatus status) {
         return rateLimitStatusCodes.contains(status);
+    }
+
+    protected List<String> getRetryDelayHeaderNames() {
+        return HeaderRetryDefaults.RETRY_DELAY_HEADERS;
+    }
+
+    protected String getRemainingHeaderName() {
+        return HeaderRetryDefaults.REMAINING_HEADER_NAME;
+    }
+
+    protected String getResetHeaderName() {
+        return HeaderRetryDefaults.RESET_HEADER_NAME;
     }
 
     private Optional<Integer> extractRetryDelayFromHeaders(final Exception ex) {
@@ -156,7 +132,7 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
             }
 
             if (headers != null) {
-                for (final String retryDelayHeaderName : retryDelayHeaderNames) {
+                for (final String retryDelayHeaderName : getRetryDelayHeaderNames()) {
                     final String retryDelayValue = headers.getFirst(retryDelayHeaderName);
                     if (retryDelayValue != null) {
                         final double parsedSeconds = Double.parseDouble(retryDelayValue);
@@ -169,10 +145,10 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
             }
 
             if (headers != null
-                    && headers.containsKey(remainingHeaderName)
-                    && headers.containsKey(resetHeaderName)) {
-                final String remaining = headers.getFirst(remainingHeaderName);
-                final String resetEpoch = headers.getFirst(resetHeaderName);
+                    && headers.containsKey(getRemainingHeaderName())
+                    && headers.containsKey(getResetHeaderName())) {
+                final String remaining = headers.getFirst(getRemainingHeaderName());
+                final String resetEpoch = headers.getFirst(getResetHeaderName());
                 if (remaining != null && remaining.equals("0") && resetEpoch != null && !resetEpoch.isBlank()) {
                     final long resetSeconds = Long.parseLong(resetEpoch);
                     final long nowSeconds = Instant.now().getEpochSecond();
