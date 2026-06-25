@@ -22,7 +22,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -212,6 +214,38 @@ class DefaultStatusCodeHandlerTest {
 
         final RetryDecision decision = statusCodeHandler.handleStatusCode(exception, 0,
                 credentialRenewal);
+
+        assertThat(decision.isShouldStop(), equalTo(true));
+        verifyNoInteractions(credentialRenewal);
+    }
+
+    @Test
+    void handleStatusCode_WithConflictAndEndpointPolicy_Retries() {
+        final DefaultStatusCodeHandler endpointAwareHandler = new DefaultStatusCodeHandler(
+                Map.of("qualys-host-list", Set.of(HttpStatus.CONFLICT)));
+        final HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.CONFLICT);
+
+        final RetryDecision decision = endpointAwareHandler.handleStatusCode(
+                exception,
+                0,
+                credentialRenewal,
+                RetryRequestContext.builder().endpoint("qualys-host-list").build());
+
+        assertThat(decision.isShouldStop(), equalTo(false));
+        verifyNoInteractions(credentialRenewal);
+    }
+
+    @Test
+    void handleStatusCode_WithConflictAndDifferentEndpointPolicy_Stops() {
+        final DefaultStatusCodeHandler endpointAwareHandler = new DefaultStatusCodeHandler(
+                Map.of("another-endpoint", Set.of(HttpStatus.CONFLICT)));
+        final HttpClientErrorException exception = new HttpClientErrorException(HttpStatus.CONFLICT);
+
+        final RetryDecision decision = endpointAwareHandler.handleStatusCode(
+                exception,
+                0,
+                credentialRenewal,
+                RetryRequestContext.builder().endpoint("qualys-host-list").build());
 
         assertThat(decision.isShouldStop(), equalTo(true));
         verifyNoInteractions(credentialRenewal);

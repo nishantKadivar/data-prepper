@@ -10,43 +10,22 @@
 
 package org.opensearch.dataprepper.plugins.source.source_crawler.utils.retry;
 
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
 
-import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
-
-import static org.opensearch.dataprepper.logging.DataPrepperMarkers.NOISY;
 
 /**
- * Retry strategy that respects retry-after header
+ * @deprecated Prefer {@link HeaderAwareRetryStrategy}. This class is retained
+ * only for backward compatibility.
  */
-@Slf4j
-public class RetryAfterHeaderStrategy implements RetryStrategy {
-    private static final String RATE_LIMIT_REMAINING = "X-RateLimit-Remaining";
-    private static final String RATE_LIMIT_RESET = "X-RateLimit-Reset";
-    private static final String RETRY_AFTER = "Retry-After";
-    private static final int MAX_RETRY_AFTER_SECONDS = 86400; // ceiling guards against int overflow in the sleep calculation
-    private static final List<HttpStatus> DEFAULT_RATE_LIMIT_STATUS_CODES = Arrays.asList(HttpStatus.TOO_MANY_REQUESTS);
-
-    private final List<Integer> retryAttemptSleepTime;
-    private final List<Integer> rateLimitRetrySleepTime;
-    private final List<HttpStatus> rateLimitStatusCodes;
-    private final int maxRetries;
+@Deprecated
+public class RetryAfterHeaderStrategy extends HeaderAwareRetryStrategy {
 
     /**
      * Constructor with default sleep times
      */
     public RetryAfterHeaderStrategy() {
-        this.retryAttemptSleepTime = RetryStrategy.DEFAULT_RETRY_ATTEMPT_SLEEP_TIME;
-        this.rateLimitRetrySleepTime = RetryStrategy.DEFAULT_RATE_LIMIT_RETRY_SLEEP_TIME;
-        this.rateLimitStatusCodes = DEFAULT_RATE_LIMIT_STATUS_CODES;
-        this.maxRetries = RetryStrategy.MAX_RETRIES;
+        super();
     }
 
     /**
@@ -55,10 +34,7 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
      * @param maxRetries Maximum number of retries
      */
     public RetryAfterHeaderStrategy(final int maxRetries) {
-        this.retryAttemptSleepTime = RetryStrategy.DEFAULT_RETRY_ATTEMPT_SLEEP_TIME;
-        this.rateLimitRetrySleepTime = RetryStrategy.DEFAULT_RATE_LIMIT_RETRY_SLEEP_TIME;
-        this.rateLimitStatusCodes = DEFAULT_RATE_LIMIT_STATUS_CODES;
-        this.maxRetries = maxRetries;
+        super(maxRetries);
     }
 
     /**
@@ -68,89 +44,32 @@ public class RetryAfterHeaderStrategy implements RetryStrategy {
      *                                seconds)
      * @param rateLimitStatusCodes List of status codes that are considered rate limited
      */
-    public RetryAfterHeaderStrategy(List<Integer> rateLimitRetrySleepTime, List<HttpStatus> rateLimitStatusCodes) {
-        this.retryAttemptSleepTime = RetryStrategy.DEFAULT_RETRY_ATTEMPT_SLEEP_TIME;
-        this.rateLimitRetrySleepTime = rateLimitRetrySleepTime != null
-                ? rateLimitRetrySleepTime
-                : RetryStrategy.DEFAULT_RATE_LIMIT_RETRY_SLEEP_TIME;
-        this.rateLimitStatusCodes = rateLimitStatusCodes != null
-                ? rateLimitStatusCodes
-                : DEFAULT_RATE_LIMIT_STATUS_CODES;
-        this.maxRetries = this.rateLimitRetrySleepTime.size();
+    public RetryAfterHeaderStrategy(
+            final List<Integer> rateLimitRetrySleepTime,
+            final List<HttpStatus> rateLimitStatusCodes) {
+        super(rateLimitRetrySleepTime, rateLimitStatusCodes);
     }
 
-    @Override
-    public long calculateSleepTime(Exception ex, int retryCount) {
-        Optional<HttpStatus> statusCode = RetryStrategy.getStatusCode(ex);
-
-        if (statusCode.isPresent() && isRateLimited(statusCode.get())) {
-            final Optional<Integer> retryAfterSeconds = extractRetryAfterHeader(ex);
-            if (retryAfterSeconds.isPresent()) {
-                log.info("Using retry-after header value: {} seconds (attempt {}/{})",
-                        retryAfterSeconds.get(), retryCount + 1, getMaxRetries());
-                return retryAfterSeconds.get() * RetryStrategy.SLEEP_TIME_MULTIPLIER_MS;
-            }
-        }
-
-        // Fallback to fixed backoff
-        List<Integer> sleepTimes = (statusCode.isPresent() && isRateLimited(statusCode.get()))
-                ? rateLimitRetrySleepTime
-                : retryAttemptSleepTime;
-
-        int sleepTimeSeconds = (retryCount < sleepTimes.size())
-                ? sleepTimes.get(retryCount)
-                : sleepTimes.get(sleepTimes.size() - 1);
-
-        log.debug("Retrying in {} seconds (attempt {}/{})",
-                sleepTimeSeconds, retryCount + 1, getMaxRetries());
-
-        return sleepTimeSeconds * RetryStrategy.SLEEP_TIME_MULTIPLIER_MS;
+    /**
+     * Constructor with custom header mapping.
+     *
+     * @param rateLimitRetrySleepTime custom sleep times for rate-limit retries (in seconds)
+     * @param rateLimitStatusCodes status codes considered rate-limited
+     * @param retryDelayHeaderNames retry-delay style headers in precedence order
+     * @param remainingHeaderName remaining-quota header name
+     * @param resetHeaderName reset-epoch header name
+     */
+    public RetryAfterHeaderStrategy(
+            final List<Integer> rateLimitRetrySleepTime,
+            final List<HttpStatus> rateLimitStatusCodes,
+            final List<String> retryDelayHeaderNames,
+            final String remainingHeaderName,
+            final String resetHeaderName) {
+        super(
+                rateLimitRetrySleepTime,
+                rateLimitStatusCodes,
+                retryDelayHeaderNames,
+                remainingHeaderName,
+                resetHeaderName);
     }
-
-    @Override
-    public int getMaxRetries() {
-        return maxRetries;
-    }
-
-    private boolean isRateLimited(final HttpStatus status) {
-        return rateLimitStatusCodes.contains(status);
-    }
-
-    private Optional<Integer> extractRetryAfterHeader(Exception ex) {
-        try {
-            HttpHeaders headers = null;
-            if (ex instanceof HttpClientErrorException) {
-                headers = ((HttpClientErrorException) ex).getResponseHeaders();
-            } else if (ex instanceof HttpServerErrorException) {
-                headers = ((HttpServerErrorException) ex).getResponseHeaders();
-            }
-
-            if (headers != null && headers.containsKey(RETRY_AFTER)) {
-                String retryAfter = headers.getFirst(RETRY_AFTER);
-                if (retryAfter != null) {
-                    // Some services send a fractional Retry-After (e.g. 299.997); round up so we never wait less than requested.
-                    final double parsedSeconds = Double.parseDouble(retryAfter);
-                    if (Double.isFinite(parsedSeconds)) {
-                        final int seconds = (int) Math.min(Math.ceil(parsedSeconds), MAX_RETRY_AFTER_SECONDS);
-                        return Optional.of(Math.max(seconds, 1));
-                    }
-                }
-            }
-            if (headers != null && headers.containsKey(RATE_LIMIT_REMAINING) && headers.containsKey(RATE_LIMIT_RESET)) {
-                String xRateLimitRemaining = headers.getFirst(RATE_LIMIT_REMAINING);
-                String resetEpoch = headers.getFirst(RATE_LIMIT_RESET);
-                if (xRateLimitRemaining != null && xRateLimitRemaining.equals("0") && resetEpoch != null
-                        && !resetEpoch.isBlank()) {
-                    long resetSeconds = Long.parseLong(resetEpoch);
-                    long nowSeconds = Instant.now().getEpochSecond();
-                    long wait = resetSeconds - nowSeconds + 1;
-                    return Optional.of((int) Math.max(wait, 1));
-                }
-            }
-        } catch (NumberFormatException e) {
-            log.warn(NOISY, "Failed to parse retry-after header: {}", e.getMessage());
-        }
-        return Optional.empty();
-    }
-
 }

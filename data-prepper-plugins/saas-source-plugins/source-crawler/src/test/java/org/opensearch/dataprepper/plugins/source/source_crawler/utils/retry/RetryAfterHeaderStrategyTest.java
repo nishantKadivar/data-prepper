@@ -28,11 +28,11 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 
-class RetryAfterHeaderStrategyTest {
+class HeaderAwareRetryStrategyTest {
 
     @Test
     void constructor_WithCustomMaxRetries_InitializesSuccessfully() {
-        final RetryAfterHeaderStrategy strategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy strategy = new HeaderAwareRetryStrategy(1);
         assertThat(strategy, notNullValue());
         assertThat(strategy.getMaxRetries(), equalTo(1));
     }
@@ -40,46 +40,46 @@ class RetryAfterHeaderStrategyTest {
     @Test
     void constructor_WithCustomRateLimitSleepTime_InitializesSuccessfully() {
         final List<Integer> customSleepTime = Arrays.asList(10);
-        final RetryAfterHeaderStrategy strategy = new RetryAfterHeaderStrategy(customSleepTime,null);
+        final HeaderAwareRetryStrategy strategy = new HeaderAwareRetryStrategy(customSleepTime,null);
         assertThat(strategy, notNullValue());
         assertThat(strategy.getMaxRetries(), equalTo(1));
     }
 
     @Test
     void constructor_WithNullRateLimitSleepTime_UsesDefaultValues() {
-        final RetryAfterHeaderStrategy strategy = new RetryAfterHeaderStrategy(null,null);
+        final HeaderAwareRetryStrategy strategy = new HeaderAwareRetryStrategy(null,null);
         assertThat(strategy, notNullValue());
         assertThat(strategy.getMaxRetries(), equalTo(6));
     }
 
     @Test
     void getMaxRetries_ReturnsExpectedValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
-        assertThat(retryAfterHeaderStrategy.getMaxRetries(), equalTo(1));
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
+        assertThat(retryStrategy.getMaxRetries(), equalTo(1));
     }
 
     @Test
     void calculateSleepTime_WithRetryAfterHeader_UsesHeaderValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "15");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(15000L));
     }
 
     @Test
     void calculateSleepTime_WithInvalidRetryAfterHeader_FallsBackToDefault() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "invalid");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         // Should fall back to default rate limit sleep time (5 seconds for first retry)
         assertThat(sleepTime, equalTo(5000L));
@@ -87,47 +87,47 @@ class RetryAfterHeaderStrategyTest {
 
     @Test
     void calculateSleepTime_WithMissingRetryAfterHeader_FallsBackToDefault() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithNullHeaders_FallsBackToDefault() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", null, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithNonRateLimitError_UsesDefaultBackoff() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpServerErrorException exception = new HttpServerErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(1000L));
     }
 
     @Test
     void calculateSleepTime_WithServerErrorAndRetryAfterHeader_IgnoresHeader() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "15");
         final HttpServerErrorException exception = new HttpServerErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         // Should use default backoff, not retry-after header
         assertThat(sleepTime, equalTo(1000L));
@@ -136,7 +136,7 @@ class RetryAfterHeaderStrategyTest {
     @Test
     void calculateSleepTime_WithCustomRateLimitSleepTime_UsesCustomValues() {
         final List<Integer> customSleepTime = Arrays.asList(10);
-        final RetryAfterHeaderStrategy strategy = new RetryAfterHeaderStrategy(customSleepTime, null);
+        final HeaderAwareRetryStrategy strategy = new HeaderAwareRetryStrategy(customSleepTime, null);
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS);
 
@@ -147,32 +147,32 @@ class RetryAfterHeaderStrategyTest {
 
     @Test
     void calculateSleepTime_WithRetryCountExceedingList_ReturnsLastValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpServerErrorException exception = new HttpServerErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 10);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 10);
 
         assertThat(sleepTime, equalTo(40000L));
     }
 
     @Test
     void calculateSleepTime_WithRateLimitAndExceedingCount_ReturnsLastValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 10);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 10);
 
         assertThat(sleepTime, equalTo(300000L));
     }
 
     @Test
     void calculateSleepTime_WithGenericException_UsesDefaultBackoff() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final Exception exception = new RuntimeException("Generic error");
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(1000L));
     }
@@ -181,11 +181,11 @@ class RetryAfterHeaderStrategyTest {
     @MethodSource("normalRetryArguments")
     void calculateSleepTime_WithNormalRetries_ReturnsExpectedTime(final int retryCount,
                                                                   final long expectedTimeMs) {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpServerErrorException exception = new HttpServerErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, retryCount);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, retryCount);
 
         assertThat(sleepTime, equalTo(expectedTimeMs));
     }
@@ -194,141 +194,141 @@ class RetryAfterHeaderStrategyTest {
     @MethodSource("rateLimitRetryArguments")
     void calculateSleepTime_WithRateLimitError_ReturnsExpectedTime(final int retryCount,
                                                                    final long expectedTimeMs) {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, retryCount);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, retryCount);
 
         assertThat(sleepTime, equalTo(expectedTimeMs));
     }
 
     @Test
     void calculateSleepTime_WithRetryAfterHeaderOnSecondRetry_UsesHeaderValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "45");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 3);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 3);
 
         assertThat(sleepTime, equalTo(45000L));
     }
 
     @Test
     void calculateSleepTime_WithZeroRetryAfterHeader_UsesHeaderValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "0");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(1000L));
     }
 
     @Test
     void calculateSleepTime_WithLargeRetryAfterHeader_UsesHeaderValue() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "600");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(600000L));
     }
 
     @Test
     void calculateSleepTime_WithFractionalRetryAfterHeader_RoundsUpToNextSecond() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "299.997");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(300000L));
     }
 
     @Test
     void calculateSleepTime_WithSmallFractionalRetryAfterHeader_RoundsUpToNextSecond() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "123.39");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(124000L));
     }
 
     @Test
     void calculateSleepTime_WithSubSecondRetryAfterHeader_UsesMinimumOneSecond() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "0.5");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(1000L));
     }
 
     @Test
     void calculateSleepTime_WithNonFiniteRetryAfterHeader_FallsBackToDefault() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "Infinity");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithExcessiveRetryAfterHeader_IsClampedToMaximum() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "999999999999");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(86400000L));
     }
 
     @Test
     void calculateSleepTime_WithEmptyRetryAfterHeader_FallsBackToDefault() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "");
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithSequentialRetries_IncreasesBackoffTime() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpServerErrorException exception = new HttpServerErrorException(
                 HttpStatus.INTERNAL_SERVER_ERROR);
 
-        final long sleepTime0 = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
-        final long sleepTime1 = retryAfterHeaderStrategy.calculateSleepTime(exception, 1);
-        final long sleepTime2 = retryAfterHeaderStrategy.calculateSleepTime(exception, 2);
+        final long sleepTime0 = retryStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime1 = retryStrategy.calculateSleepTime(exception, 1);
+        final long sleepTime2 = retryStrategy.calculateSleepTime(exception, 2);
 
         assertThat(sleepTime0, equalTo(1000L));
         assertThat(sleepTime1, equalTo(2000L));
@@ -357,14 +357,14 @@ class RetryAfterHeaderStrategyTest {
 
     @Test
     void calculateSleepTime_WithRetryAfterHeaderAsInvalidHttpDate_ShouldFallBackToDefault() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("retry-after", "Invalid Date Format");
 
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         // Should fall back to default rate limit sleep time
         assertThat(sleepTime, equalTo(5000L));
@@ -372,7 +372,7 @@ class RetryAfterHeaderStrategyTest {
 
     @Test
     void calculateSleepTime_WithXRateLimitRemainingZero_ShouldCalculateWaitTime() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("X-RateLimit-Remaining", "0");
         final long resetTime = Instant.now().getEpochSecond() + 300;
@@ -381,14 +381,14 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Rate limit exceeded", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(301000L));
     }
 
     @Test
     void calculateSleepTime_WithXRateLimitResetInPast_ShouldReturnMinimum() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("X-RateLimit-Remaining", "0");
         final long pastResetTime = Instant.now().getEpochSecond() - 60;
@@ -397,14 +397,14 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.FORBIDDEN, "Rate limit expired", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(1000L));
     }
 
     @Test
     void calculateSleepTime_WithXRateLimitButRemainingNotZero_ShouldIgnoreHeaders() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("X-RateLimit-Remaining", "10");
         final long resetTime = Instant.now().getEpochSecond() + 300;
@@ -413,14 +413,14 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Request", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithXRateLimitResetBlank_ShouldIgnoreHeaders() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("X-RateLimit-Remaining", "0");
         headers.set("X-RateLimit-Reset", "");
@@ -428,14 +428,14 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Request", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithXRateLimitResetInvalidNumber_ShouldIgnoreHeaders() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("X-RateLimit-Remaining", "0");
         headers.set("X-RateLimit-Reset", "invalid-number");
@@ -443,14 +443,14 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Request", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(5000L));
     }
 
     @Test
     void calculateSleepTime_WithBothRetryAfterAndXRateLimit_ShouldPreferRetryAfter() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("Retry-After", "60");
         headers.set("X-RateLimit-Remaining", "0");
@@ -460,14 +460,14 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Too Many Requests", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(60000L));
     }
 
     @Test
     void calculateSleepTime_WithXRateLimitResetOneSecondAway_ShouldReturnMinimum() {
-        final RetryAfterHeaderStrategy retryAfterHeaderStrategy = new RetryAfterHeaderStrategy(1);
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(1);
         final HttpHeaders headers = new HttpHeaders();
         headers.set("X-RateLimit-Remaining", "0");
         final long resetTime = Instant.now().getEpochSecond() + 1;
@@ -476,8 +476,48 @@ class RetryAfterHeaderStrategyTest {
         final HttpClientErrorException exception = new HttpClientErrorException(
                 HttpStatus.TOO_MANY_REQUESTS, "Rate limit exceeded", headers, null, null);
 
-        final long sleepTime = retryAfterHeaderStrategy.calculateSleepTime(exception, 0);
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
 
         assertThat(sleepTime, equalTo(2000L));
+    }
+
+    @Test
+    void calculateSleepTime_WithCustomRetryAfterHeader_UsesConfiguredHeader() {
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(
+                null,
+                List.of(HttpStatus.CONFLICT),
+                List.of("X-Qualys-Retry-In"),
+                null,
+                null);
+        final HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Qualys-Retry-In", "12");
+
+        final HttpClientErrorException exception = new HttpClientErrorException(
+                HttpStatus.CONFLICT, "Conflict", headers, null, null);
+
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
+
+        assertThat(sleepTime, equalTo(12000L));
+    }
+
+    @Test
+    void calculateSleepTime_WithCustomRemainingAndResetHeaders_UsesConfiguredHeaders() {
+        final HeaderAwareRetryStrategy retryStrategy = new HeaderAwareRetryStrategy(
+                null,
+                List.of(HttpStatus.CONFLICT),
+                null,
+                "X-Quota-Remaining",
+                "X-Quota-Reset");
+        final HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Quota-Remaining", "0");
+        final long resetTime = Instant.now().getEpochSecond() + 10;
+        headers.set("X-Quota-Reset", String.valueOf(resetTime));
+
+        final HttpClientErrorException exception = new HttpClientErrorException(
+                HttpStatus.CONFLICT, "Conflict", headers, null, null);
+
+        final long sleepTime = retryStrategy.calculateSleepTime(exception, 0);
+
+        assertThat(sleepTime, equalTo(11000L));
     }
 }

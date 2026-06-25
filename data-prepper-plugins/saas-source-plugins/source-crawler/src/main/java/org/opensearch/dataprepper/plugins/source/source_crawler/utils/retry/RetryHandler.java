@@ -104,6 +104,76 @@ public class RetryHandler {
         throw new RuntimeException("Exceeded maximum retry attempts (" + maxRetries + ")");
     }
 
+    /**
+     * Executes the given operation with retry logic, optional credential renewal,
+     * failure handler, and request context provider.
+     *
+     * @param operation                  The operation to execute.
+     * @param credentialRenewal          The action to renew credentials if needed.
+     * @param failureHandler             The handler to run on each failed attempt
+     *                                   (optional).
+     * @param retryRequestContextSupplier Supplies context for policy-aware retry
+     *                                   handling (optional).
+     * @param <T>                        The return type of the operation.
+     * @return The result of the operation.
+     */
+    public <T> T executeWithRetry(
+            final Supplier<T> operation,
+            final Runnable credentialRenewal,
+            final Runnable failureHandler,
+            final Supplier<RetryRequestContext> retryRequestContextSupplier) {
+        if (operation == null) {
+            throw new SaaSCrawlerException("Operation cannot be null", false);
+        }
+        if (credentialRenewal == null) {
+            throw new SaaSCrawlerException("Credential renewal cannot be null", false);
+        }
+        if (retryRequestContextSupplier == null) {
+            throw new SaaSCrawlerException("Retry request context supplier cannot be null", false);
+        }
+
+        final int maxRetries = retryStrategy.getMaxRetries();
+        int retryCount = 0;
+
+        while (retryCount < maxRetries) {
+            boolean operationSucceeded = false;
+            try {
+                T result = operation.get();
+                operationSucceeded = true;
+                return result;
+            } catch (HttpClientErrorException | HttpServerErrorException ex) {
+                final RetryRequestContext providedContext = retryRequestContextSupplier.get();
+                final RetryRequestContext retryRequestContext = providedContext != null
+                    ? providedContext
+                        : RetryRequestContext.EMPTY;
+                RetryDecision decision = statusCodeHandler.handleStatusCode(
+                        ex, retryCount, credentialRenewal, retryRequestContext);
+
+                if (decision.isShouldStop()) {
+                    decision.getException().ifPresent(e -> {
+                        throw new SecurityException("Access forbidden: " + e.getMessage());
+                    });
+                    throw ex;
+                }
+
+                if (retryCount == maxRetries - 1) {
+                    log.error("Exceeded maximum retry attempts ({})", maxRetries, ex);
+                    throw ex;
+                }
+
+                // Calculate sleep time and wait
+                long sleepTimeMs = retryStrategy.calculateSleepTime(ex, retryCount);
+                sleep(sleepTimeMs);
+            } finally {
+                if (!operationSucceeded && failureHandler != null) {
+                    failureHandler.run();
+                }
+            }
+            retryCount++;
+        }
+        throw new RuntimeException("Exceeded maximum retry attempts (" + maxRetries + ")");
+    }
+
     private void sleep(long milliseconds) {
         try {
             Thread.sleep(milliseconds);
